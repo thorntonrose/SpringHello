@@ -1,0 +1,18 @@
+Configuration:
+  appenders:
+    File:
+      name: File
+      # fileName: build/test.log
+      # use this to get multiple log files when running tests in parallel:
+      fileName: build/test.log.${sys:org.gradle.test.worker}
+      createOnDemand: true
+      append: true
+      bufferedIO: false
+      PatternLayout:
+        Pattern: "%d{HH:mm:ss.SSS} %-5p %c{2} - %m%n"
+
+  Loggers:
+    Root:
+      level: DEBUG
+      AppenderRef:
+        ref: File

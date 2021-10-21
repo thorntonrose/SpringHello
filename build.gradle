@@ -1,0 +1,121 @@
+import com.bmuschko.gradle.docker.tasks.image.*
+import org.apache.tools.ant.filters.*
+
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+
+	dependencies {
+		classpath "com.bmuschko:gradle-docker-plugin:6.7.0"
+	}
+}
+
+plugins {
+	id "java"
+	id "org.springframework.boot" version "2.5.0"
+}
+
+apply plugin: com.bmuschko.gradle.docker.DockerRemoteApiPlugin
+
+group = "trose"
+version = "0.1.0"
+sourceCompatibility = "1.8"
+
+repositories {
+	mavenCentral()
+}
+
+sourceSets {
+   funcTest {
+		java { srcDir "funcTest" }
+		resources { srcDir "funcTest/resources" }
+	}
+}
+
+configurations {
+	funcTestCompile.extendsFrom testCompile
+	funcTestRuntime.extendsFrom testRuntime
+
+	all {
+		exclude  group: "org.springframework.boot", module: "spring-boot-starter-logging"
+	}
+}
+
+dependencies {
+	compile "org.springframework.boot:spring-boot-starter-web:2.5.0"
+	compile "org.springframework.boot:spring-boot-starter-data-jpa:2.5.0"
+
+	testCompile "junit:junit:4.12"
+	testCompile "org.apache.logging.log4j:log4j-slf4j-impl:2.8.1"
+	testCompile "org.springframework.boot:spring-boot-starter-test:2.5.0"
+	testCompile("org.junit.vintage:junit-vintage-engine") { exclude group: "org.hamcrest", module: "hamcrest-core" }
+
+	funcTestCompile "org.testcontainers:testcontainers:1.15.3"
+
+	runtime "org.apache.logging.log4j:log4j-core:2.8.1"
+	runtime "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.8.6"
+	runtime "com.fasterxml.jackson.core:jackson-databind:2.8.6"
+	runtime "org.postgresql:postgresql:42.2.24.jre7"
+}
+
+springBoot {
+	mainClass = "${project.group}.Application"
+}
+
+//-----------------------------------------------------------------------------
+
+task prepareDockerUnfiltered(type: Copy) {
+	from "$buildDir/libs"
+	include "*.jar"
+	into "$buildDir/docker"
+	doFirst { mkdir "$buildDir/docker" }
+}
+
+task prepareDocker(type: Copy) {
+	dependsOn prepareDockerUnfiltered
+	from "src/docker"
+	include "*"
+	into "$buildDir/docker"
+
+	doFirst {
+		filter ReplaceTokens, tokens: [NAME: project.name, VERSION: project.version]
+	}
+}
+
+task buildImage(type: DockerBuildImage) {
+	dependsOn prepareDocker
+	inputDir = file("$buildDir/docker")
+	images = ["${project.name}:latest" as String]
+}
+
+assemble {
+	dependsOn buildImage
+}
+
+tasks.withType(Test) {
+	dependsOn cleanTest
+	ignoreFailures = true
+	testLogging.maxGranularity = 0
+
+	def results = []
+	afterTest { desc, result -> println "${desc.className}.${desc.name}: ${result.resultType}" }
+	afterSuite { desc, result -> if (desc.className) { results << result } }
+	onOutput { dest, event -> print event.message }
+
+	doLast {
+		println "Tests: ${results.sum { it.testCount }}, Failures: ${results.sum { it.failedTestCount }}" +
+			", Errors: ${results.sum { it.exceptions.size() }}, Skipped: ${results.sum { it.skippedTestCount }}"
+	}
+}
+
+task cleanFuncTest(type: Delete) {
+	delete "$buildDir/test-results/funcTest", "$buildDir/reports/tests/funcTest"
+}
+
+task funcTest(type: Test) {
+	dependsOn cleanFuncTest
+	testClassesDirs = sourceSets[name].output.classesDirs
+	classpath = sourceSets[name].runtimeClasspath
+	systemProperties image: project.name
+}

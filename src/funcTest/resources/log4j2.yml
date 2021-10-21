@@ -1,0 +1,21 @@
+Configuration:
+  appenders:
+    File:
+      name: File
+      fileName: build/funcTest.log
+      createOnDemand: true
+      append: true
+      bufferedIO: false
+      PatternLayout:
+        Pattern: "%d{HH:mm:ss.SSS} %-5p %c{1} - %m%n"
+
+  Loggers:
+    Root:
+      level: DEBUG
+      AppenderRef:
+        ref: File
+    logger:
+      - name: org.testcontainers
+        level: INFO
+      - name: com.github.dockerjava
+        level: INFO

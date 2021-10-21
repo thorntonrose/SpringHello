@@ -1,0 +1,5 @@
+FROM openjdk:8
+COPY . /
+ENTRYPOINT ["/entrypoint"]
+EXPOSE 8080
+STOPSIGNAL SIGINT
